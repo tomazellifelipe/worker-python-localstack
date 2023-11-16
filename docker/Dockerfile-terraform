@@ -1,0 +1,10 @@
+# syntax=docker/dockerfile:1
+
+ARG TERRAFORM_VERSION=1.6.4
+FROM hashicorp/terraform:${TERRAFORM_VERSION}
+
+COPY infrastructure .
+
+RUN terraform init
+
+ENTRYPOINT terraform apply --auto-approve

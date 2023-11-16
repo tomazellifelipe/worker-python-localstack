@@ -1,0 +1,94 @@
+# Comments are provided throughout this file to help you get started.
+# If you need more help, visit the Docker compose reference guide at
+# https://docs.docker.com/compose/compose-file/
+
+# Here the instructions define your application as a service called "server".
+# This service is built from the Dockerfile in the current directory.
+# You can add other services your application may depend on here, such as a
+# database or a cache. For examples, see the Awesome Compose repository:
+# https://github.com/docker/awesome-compose
+services:
+  localstack:
+    container_name: "${LOCALSTACK_DOCKER_NAME-localstack-main}"
+    image: localstack/localstack
+    ports:
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:4510-4559:4510-4559"
+    environment:
+      - DEBUG=${DEBUG-}
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
+  terraform:
+    container_name: terraform-main
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile-terraform
+    image: terraform-localstack:main
+    environment:
+      - TF_VAR_localstack_endpoint=http://localstack:4566
+      - TF_VAR_queue_name=worker-queue
+  consumer:
+    container_name: consumer-main
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile-consumer
+    image: consumer:latest
+    environment:
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - WORKER_QUEUE=worker-queue
+    depends_on:
+      terraform:
+        condition: service_completed_successfully
+        restart: true
+      localstack:
+        condition: service_started
+        restart: true
+  producer:
+    container_name: producer-main
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile-producer
+    image: producer:latest
+    environment:
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - WORKER_QUEUE=worker-queue
+    depends_on:
+      terraform:
+        condition: service_completed_successfully
+        restart: true
+      localstack:
+        condition: service_started
+        restart: true
+# The commented out section below is an example of how to define a PostgreSQL
+# database that your application can use. `depends_on` tells Docker Compose to
+# start the database before your application. The `db-data` volume persists the
+# database data between container restarts. The `db-password` secret is used
+# to set the database password. You must create `db/password.txt` and add
+# a password of your choosing to it before running `docker compose up`.
+#     depends_on:
+#       db:
+#         condition: service_healthy
+#   db:
+#     image: postgres
+#     restart: always
+#     user: postgres
+#     secrets:
+#       - db-password
+#     volumes:
+#       - db-data:/var/lib/postgresql/data
+#     environment:
+#       - POSTGRES_DB=example
+#       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
+#     expose:
+#       - 5432
+#     healthcheck:
+#       test: [ "CMD", "pg_isready" ]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
+# volumes:
+#   db-data:
+# secrets:
+#   db-password:
+#     file: db/password.txt
